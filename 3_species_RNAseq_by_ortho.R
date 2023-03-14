@@ -50,7 +50,13 @@ He_rna_counts <- He_rna_counts |> mutate_if(is.numeric, round)
 
 # collapse counts from alternate transcripts
 #Ht_rna_counts$H_tub_ID<- gsub("\\..*", "", Ht_rna_counts$H_tub_ID)
-Lv_rna_counts$L_var_ID <- str_replace(Lv_rna_counts$L_var_ID, "\\..*", "")
+#May not need to do this anymore
+#Lv_rna_counts$L_var_ID <- str_replace(Lv_rna_counts$L_var_ID, "\\..*", "")
+# collapse counts from alternate transcripts for Ht
+#Ht_rna_counts$H_tub_ID <- str_replace(Ht_rna_counts$H_tub_ID, "\\..*", "")
+# collapse counts from alternate transcripts for He
+#He_rna_counts$H_ery_ID <- str_replace(He_rna_counts$H_ery_ID, "\\..*", "")
+
 Lv_rna_counts<-Lv_rna_counts %>% group_by(L_var_ID) %>% summarise_each(funs(sum))
 
 # save intermediate tables 
@@ -66,10 +72,19 @@ He_ortho <- read_tsv("ortho_He_ready.tsv")
 # rename column and delete header of orthogroup table
 Lv_ortho <- rename(Lv_ortho, L_var_ID = L_var.longestprot)
 Lv_ortho <- Lv_ortho[-1, ]
+# rename column and delete header of orthogroup table for Ht
+Ht_ortho <- rename(Ht_ortho, H_tub_ID = H_tub.longestprot)
+Ht_ortho <- Ht_ortho[-1, ]
+# rename column and delete header of orthogroup table for He
+He_ortho <- rename(He_ortho, H_ery_ID = H_ery.longestprot)
+He_ortho <- He_ortho[-1, ]
 
 # join on gene ID column to append orthogroups
 Lv_orth_rna_counts <- left_join(Lv_rna_counts, Lv_ortho)
-
+# join on gene ID column to append orthogroups Ht
+Ht_orth_rna_counts <- left_join(Ht_rna_counts, Ht_ortho)
+# join on gene ID column to append orthogroups He
+He_orth_rna_counts <- left_join(He_rna_counts, He_ortho)
 
 library(DESeq2)
 
