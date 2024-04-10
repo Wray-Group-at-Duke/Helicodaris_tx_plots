@@ -5,5 +5,7 @@ This code builds on an R script originally developed by Jennifer Israel to analy
 
 Objectives:
 Rigorous orthology assessment: convert from SPU-based to orthogroup-based orthology (implemented in OrthoFinder).  
+
 Flexible orthogroup comparisons: allow filtering for 1:1, 1:2, and 2:2 orthologues.
+
 Clean code: replace deprecated functions, harmonize naming, add comments.   
