@@ -148,7 +148,7 @@ PCsT_rna$Sample <- row.names(PCsT_rna)
 PCsT_rna <- inner_join(PCsT_rna, s, by = "Sample")
 PCsT_rna$Stage <- factor(PCsT_rna$Stage,
                          levels = c("egg", "4c", "16c",
-                                    "32c","mb", "g", "pr"))
+                                    "32c","bl", "g", "pr"))
 #Print a summary of PCA results
 summary(PCAT_rna)
 #Create a scatter plot of principle component analysis.  Can vary PC1, PC2, PC3, etc, as well as change colors, shapes, etc. easily here.
