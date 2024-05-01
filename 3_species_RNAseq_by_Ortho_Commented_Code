@@ -113,9 +113,9 @@ all_rna_counts_sum <- inner_join(all_rna_counts_sum, Lv_slim_rna_counts, by = "O
 #Move Orthgroup to far left
 all_rna_counts_sum <- relocate(all_rna_counts_sum, "H_tub_ID", .after = "Orthogroup")
 #Intermediate file written
-write_tsv(all_rna_counts_sum, "./intermediate_files/all_rna_counts.txt")
+write_tsv(all_rna_counts_sum, "./intermediate_files/all_rna_counts.tsv")
 #Store tsv as a data frame variable called “d”
-d<-read_tsv ("./intermediate_files/all_rna_counts.txt")
+d<-read_tsv ("./intermediate_files/all_rna_counts.tsv")
 #Remove columns *_ID from d
 d<-select(d, -(c(L_var_ID, H_tub_ID, H_ery_ID)))
 #Read in sample info for each species and store as a data frame
