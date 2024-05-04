@@ -1,0 +1,211 @@
+### process bulk RNAseq results from 3 urchin species
+## data from Israel et al. (2016) PLoS Biology DOI:10.1371/journal.pbio.1002391# code based on Phil's rewrite of Jennifer's original code
+## updates:
+# 1 incorporated rigorous orthology (replaces blast and using SPU reference points)
+# 2 improved plots (scaled by time, better colors, name of gene, etc.)# 3 added comments
+# 4 replaced deprecated functions and operators
+# 5 organized data tables and naming conventions
+#
+# notes: 
+# 1 only need to run steps 1 to 3 once
+#   for PCA, load 3 files: "Xx_sample_info.csv" for each species
+#   for time courses, load 1 file: "all_rna_counts.tsv"
+#   after that, normalization and plotting can be done directly from that file
+# 2 requires pre-computed orthogroups (e.g., from Orthofinder)
+#   table containing two columns: orthogroup and gene identifier (one gene per line)
+#   files named "ortho_Lv_done.csv" etc.
+#
+# to do:
+# 1 write code for generating time-courses for a given orthologue
+
+
+### 0 ### set-up
+
+# load libraries; don't load DESeq2 yet! (throws an error due to masking; load later)
+library(tidyverse)
+
+# set working directory (replace path as needed)
+setwd("/Users/gwray/Documents/Projects_work/Bulk_RNAseq_data")
+
+### 1 ### import data and clean up tables
+
+# imported Phil's data 1/26/23
+
+# read in data from Phil's raw count tables for each species
+Lv_rna_counts <- read_delim("Lv_counts_frac_clean.txt", delim="\t")
+Ht_rna_counts <- read_delim("Ht_counts_frac_clean.txt", delim="\t")
+He_rna_counts <- read_delim("He_counts_frac_clean.txt", delim="\t")
+
+# reorganize into temporal sequence for each species 
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVEGG"), .after = L_var_ID)
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LV4"), .after = LVEGGC)
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVMB"), .after = LV32cellC)
+Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HTEGG"), .after = H_tub_ID)
+Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HT4"), .after = HTEGGC)
+Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HTMB"), .after = HT32cellC)
+He_rna_counts <- relocate(He_rna_counts, starts_with("HEEGG"), .after = H_ery_ID)
+He_rna_counts <- relocate(He_rna_counts, starts_with("HE4"), .after = HEEGGC)
+He_rna_counts <- relocate(He_rna_counts, starts_with("HEMB"), .after = HE32cellC)
+
+# rename columns for each species
+Lv_rna_counts <- rename(Lv_rna_counts, LVeggA = LVEGGA,LVeggB = LVEGGB,LVeggC = LVEGGC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV4cA = LV4cellA,LV4cB = LV4cellB,LV4cC = LV4cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV16cA = LV16cellA,LV16cB = LV16cellB,LV16cC = LV16cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV32cA = LV32cellA,LV32cB = LV32cellB,LV32cC = LV32cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVblA = LVMBA,LVblB = LVMBB,LVblC = LVMBC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVgaA = LVGA,LVgaB = LVGB,LVgaC = LVGC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVprA = LVPRA,LVprB = LVPRB,LVprC = LVPRC)
+Ht_rna_counts <- rename(Ht_rna_counts, HTeggA = HTEGGA,HTeggB = HTEGGB,HTeggC = HTEGGC)
+Ht_rna_counts <- rename(Ht_rna_counts, HT4cA = HT4cellA,HT4cB = HT4cellB,HT4cC = HT4cellC)
+Ht_rna_counts <- rename(Ht_rna_counts, HT16cA = HT16cellA,HT16cB = HT16cellB,HT16cC = HT16cellC)
+Ht_rna_counts <- rename(Ht_rna_counts, HT32cA = HT32cellA,HT32cB = HT32cellB,HT32cC = HT32cellC)
+Ht_rna_counts <- rename(Ht_rna_counts, HTblA = HTMBA,HTblB = HTMBB,HTblC = HTMBC)
+Ht_rna_counts <- rename(Ht_rna_counts, HTgaA = HTGA,HTgaB = HTGB,HTgaC = HTGC)
+Ht_rna_counts <- rename(Ht_rna_counts, HTprA = HTPRA,HTprB = HTPRB,HTprC = HTPRC)
+He_rna_counts <- rename(He_rna_counts, HEeggA = HEEGGA,HEeggB = HEEGGB,HEeggC = HEEGGC)
+He_rna_counts <- rename(He_rna_counts, HE4cA = HE4cellA,HE4cB = HE4cellB,HE4cC = HE4cellC)
+He_rna_counts <- rename(He_rna_counts, HE16cA = HE16cellA,HE16cB = HE16cellB,HE16cC = HE16cellC)
+He_rna_counts <- rename(He_rna_counts, HE32cA = HE32cellA,HE32cB = HE32cellB,HE32cC = HE32cellC)
+He_rna_counts <- rename(He_rna_counts, HEblA = HEMBA,HEblB = HEMBB,HEblC = HEMBC)
+He_rna_counts <- rename(He_rna_counts, HEgaA = HEGA,HEgaB = HEGB,HEgaC = HEGC)
+He_rna_counts <- rename(He_rna_counts, HEprA = HEPRA,HEprB = HEPRB,HEprC = HEPRC)
+
+# round counts to nearest integer for each species
+Lv_rna_counts <- Lv_rna_counts |> mutate_if(is.numeric, round)
+Ht_rna_counts <- Ht_rna_counts |> mutate_if(is.numeric, round)
+He_rna_counts <- He_rna_counts |> mutate_if(is.numeric, round)
+
+# collapse counts from alternate transcripts for each species
+Lv_rna_counts$L_var_ID <- str_replace(Lv_rna_counts$L_var_ID, "\\..*", "")
+Lv_rna_counts <- Lv_rna_counts |> group_by(L_var_ID) |> summarise(across(everything(), sum))
+Ht_rna_counts$H_tub_ID <- str_replace(Ht_rna_counts$H_tub_ID, "\\..*", "")
+Ht_rna_counts <- Ht_rna_counts |> group_by(H_tub_ID) |> summarise(across(everything(), sum))
+He_rna_counts$H_ery_ID <- str_replace(He_rna_counts$H_ery_ID, "\\..*", "")
+He_rna_counts <- He_rna_counts |> group_by(H_ery_ID) |> summarise(across(everything(), sum))
+
+# save intermediate tables 
+write_tsv(Lv_rna_counts, "./intermediate_files/Lv_rna_raw_counts.txt") 
+write_tsv(Ht_rna_counts, "./intermediate_files/Ht_rna_raw_counts.txt") 
+write_tsv(He_rna_counts, "./intermediate_files/He_rna_raw_counts.txt") 
+
+
+### 2 ### add orthogroup number to each gene and tally genes per orthogroup
+
+# import orthogroup tables
+Lv_ortho <- read_tsv("ortho_Lv_done.tsv")
+Ht_ortho <- read_tsv("ortho_Ht_done.tsv")
+He_ortho <- read_tsv("ortho_He_done.tsv")
+
+# rename column for each species 
+# TBD: do we need to delete header?
+Lv_ortho <- rename(Lv_ortho, L_var_ID = L_var.longestprot)
+#Lv_ortho <- Lv_ortho[-1, ]
+Ht_ortho <- rename(Ht_ortho, H_tub_ID = H_tub.longestprot)
+#Ht_ortho <- Ht_ortho[-1, ]
+He_ortho <- rename(He_ortho, H_ery_ID = H_ery.longestprot)
+#He_ortho <- He_ortho[-1, ]
+
+# join on gene ID column to append orthogroup to each count table
+Lv_orth_rna_counts <- left_join(Lv_rna_counts, Lv_ortho)
+Ht_orth_rna_counts <- left_join(Ht_rna_counts, Ht_ortho)
+He_orth_rna_counts <- left_join(He_rna_counts, He_ortho)
+
+# move orthogroup column to second position
+Lv_orth_rna_counts<-relocate(Lv_orth_rna_counts, "Orthogroup", .after = "L_var_ID")
+Ht_orth_rna_counts<-relocate(Ht_orth_rna_counts, "Orthogroup", .after = "H_tub_ID")
+He_orth_rna_counts<-relocate(He_orth_rna_counts, "Orthogroup", .after = "H_ery_ID")
+
+# add column n with size of orthogroup to each table
+Lv_exclude <- Lv_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
+Lv_orth_rna_counts <- left_join(Lv_orth_rna_counts, Lv_exclude)
+Lv_orth_rna_counts <- relocate(Lv_orth_rna_counts, "n", .after = "Orthogroup")
+He_exclude <- He_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
+He_orth_rna_counts <- left_join(He_orth_rna_counts, He_exclude)
+He_orth_rna_counts <- relocate(He_orth_rna_counts, "n", .after = "Orthogroup")
+Ht_exclude <- Ht_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
+Ht_orth_rna_counts <- left_join(Ht_orth_rna_counts, Ht_exclude)
+Ht_orth_rna_counts <- relocate(Ht_orth_rna_counts, "n", .after = "Orthogroup")
+
+
+### 3 ### merge 1:1:1 orthologues into a single count table
+
+# filter for rows with orthogroup size 1, then remove column n
+Lv_slim_rna_counts <- filter(Lv_orth_rna_counts, n == 1)
+Lv_slim_rna_counts <- select(Lv_slim_rna_counts, -(n))
+He_slim_rna_counts <- filter(He_orth_rna_counts, n == 1)
+He_slim_rna_counts <- select(He_slim_rna_counts, -(n))
+Ht_slim_rna_counts <- filter(Ht_orth_rna_counts, n == 1)
+Ht_slim_rna_counts <- select(Ht_slim_rna_counts, -(n))
+
+# create table with all three species joined by orthogroup
+all_rna_counts_sum <- inner_join(Ht_slim_rna_counts, He_slim_rna_counts, by = "Orthogroup")  
+all_rna_counts_sum <- inner_join(all_rna_counts_sum, Lv_slim_rna_counts, by = "Orthogroup")
+
+# move orthogroup number to first column
+all_rna_counts_sum <- relocate(all_rna_counts_sum, "H_tub_ID", .after = "Orthogroup")
+
+# write merged count table
+write_tsv(all_rna_counts_sum, "./intermediate_files/all_rna_counts.tsv")
+
+
+### 4 ### normalize counts using DESeq2 and perform differential expression analysis
+
+# read merged count table and assign to a data frame
+d <- read_tsv ("./intermediate_files/all_rna_counts.tsv")
+
+# remove gene ID and Orthogroup columns (messes up DESeq2)
+d <- select(d, -(c(L_var_ID, H_tub_ID, H_ery_ID)))
+d <- select(d, -Orthogroup)
+
+# read in sample info for each species and store as a data frame
+Hery_sample_info <- read.csv("./intermediate_files/He_sample_info.csv")
+Htub_sample_info <- read.csv("./intermediate_files/Ht_sample_info.csv")
+Lvar_sample_info <- read.csv("./intermediate_files/Lv_sample_info.csv")
+
+# combine all sample info into a single data frame “s”
+s <- rbind(Hery_sample_info, Htub_sample_info, Lvar_sample_info)
+
+# load DESeq2 library
+library(DESeq2)
+
+# create DESeq object from count table, sample info, with Species as variable of interest
+dds_rna <- DESeqDataSetFromMatrix(countData = d, colData = s, design = ~Species)
+
+# create a new variable "group" that combines species and stage
+dds_rna$group <- factor(paste0(dds_rna$Species, dds_rna$Stage))
+
+# update design to include "group"
+design(dds_rna) <- ~ group
+
+# perform differential expression analysis
+dds_rna <- DESeq(dds_rna) 
+
+# transform count data to log2 and store as a data frame
+rlog_dds_rna <- rlog(dds_rna)
+rlog_rna_counts <- as.data.frame(assay(rlog_dds_rna))
+rlog_rna_countsT <- as.data.frame(t(rlog_rna_counts))
+
+
+### 5 ### carry out PCA and plot
+
+# perform the PCA
+PCAT_rna <- prcomp(rlog_rna_countsT, center = TRUE)
+PCsT_rna <- as.data.frame(PCAT_rna$x)
+PCsT_rna$Sample <- row.names(PCsT_rna)
+PCsT_rna <- inner_join(PCsT_rna, s, by = "Sample")
+PCsT_rna$Stage <- factor(PCsT_rna$Stage,levels = c("egg","4c","16c","32c","bl","g","pr"))
+
+# print a summary of PCA results
+summary(PCAT_rna)
+
+# create a scatter plot of principle component analysis
+# can vary PC1, PC2, PC3, etc, as well as change colors, shapes, etc. easily here
+# note: factor loading values are "hard wired" so update for other PCs
+ggplot(data = PCsT_rna, aes(PC1, PC2, color = Species, shape = Stage)) +
+  geom_point(size = 3) + 
+  scale_shape_manual(values = c(0,1,2,15,16,17,8)) +
+  labs(x = "PC1 (28.5%)", y = "PC2 (21.0%)") +
+  theme_classic()
+
+
+
