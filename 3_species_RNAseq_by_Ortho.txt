@@ -1,16 +1,18 @@
 ### process bulk RNAseq results from 3 urchin species
-## data from Israel et al. (2016) PLoS Biology DOI:10.1371/journal.pbio.1002391# code based on Phil's rewrite of Jennifer's original code
-## updates:
+#
+# data from Israel et al. (2016) PLoS Biology DOI:10.1371/journal.pbio.1002391
+# code based on Phil's rewrite of Jennifer's original code
+#
+# updates:
 # 1 incorporated rigorous orthology (replaces blast and using SPU reference points)
-# 2 improved plots (scaled by time, better colors, name of gene, etc.)# 3 added comments
+# 2 improved plots (scaled by time, better colors, name of gene, etc.)
+# 3 added comments
 # 4 replaced deprecated functions and operators
 # 5 organized data tables and naming conventions
 #
 # notes: 
 # 1 only need to run steps 1 to 3 once
-#   for PCA, load 3 files: "Xx_sample_info.csv" for each species
-#   for time courses, load 1 file: "all_rna_counts.tsv"
-#   after that, normalization and plotting can be done directly from that file
+#   after that, normalization, PCA, and plotting can be done directly from that file
 # 2 requires pre-computed orthogroups (e.g., from Orthofinder)
 #   table containing two columns: orthogroup and gene identifier (one gene per line)
 #   files named "ortho_Lv_done.csv" etc.
@@ -25,7 +27,8 @@
 library(tidyverse)
 
 # set working directory (replace path as needed)
-setwd("/Users/gwray/Documents/Projects_work/Bulk_RNAseq_data")
+setwd("/Users/gwray/Documents/Projects_work/Bulk_RNAseq_data")
+
 
 ### 1 ### import data and clean up tables
 
