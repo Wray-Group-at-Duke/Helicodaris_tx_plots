@@ -1,25 +1,29 @@
-### process bulk RNAseq results from 3 urchin species
+### process bulk RNAseq time courses from 3 urchin species
 #
 # data from Israel et al. (2016) PLoS Biology DOI:10.1371/journal.pbio.1002391
 # code based on Phil's rewrite of Jennifer's original code
 #
 # updates:
 # 1 incorporated rigorous orthology (replaces blast and using SPU reference points)
-# 2 improved plots (scaled by time, better colors, name of gene, etc.)
-# 3 added comments
-# 4 replaced deprecated functions and operators
-# 5 organized data tables and naming conventions
+# 2 added comments
+# 3 replaced deprecated functions and operators
+# 4 organized data tables and naming conventions
 #
 # notes: 
 # 1 only need to run steps 1 to 3 once
+#   generates the file "all_rna_counts.tsv"
 #   after that, normalization, PCA, and plotting can be done directly from that file
 # 2 requires pre-computed orthogroups (e.g., from Orthofinder)
 #   table containing two columns: orthogroup and gene identifier (one gene per line)
-#   files named "ortho_Lv_done.csv" etc.
+#   files named "ortho_Lv_done.csv", "ortho_Ht_done.csv", "ortho_He_done.csv",
+#
+# status: in progress
 #
 # to do:
 # 1 write code for generating time-courses for a given orthologue
-
+#   incorporate color-coding for feeding/nonfeeding (previously arbitrary)
+#   scale x-axis by clock time (previously by timepoint)
+#   display gene name (previously showed SPU_XXXX) 
 
 ### 0 ### set-up
 
@@ -43,9 +47,11 @@ He_rna_counts <- read_delim("He_counts_frac_clean.txt", delim="\t")
 Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVEGG"), .after = L_var_ID)
 Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LV4"), .after = LVEGGC)
 Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVMB"), .after = LV32cellC)
+
 Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HTEGG"), .after = H_tub_ID)
 Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HT4"), .after = HTEGGC)
 Ht_rna_counts <- relocate(Ht_rna_counts, starts_with("HTMB"), .after = HT32cellC)
+
 He_rna_counts <- relocate(He_rna_counts, starts_with("HEEGG"), .after = H_ery_ID)
 He_rna_counts <- relocate(He_rna_counts, starts_with("HE4"), .after = HEEGGC)
 He_rna_counts <- relocate(He_rna_counts, starts_with("HEMB"), .after = HE32cellC)
@@ -58,6 +64,7 @@ Lv_rna_counts <- rename(Lv_rna_counts, LV32cA = LV32cellA,LV32cB = LV32cellB,LV3
 Lv_rna_counts <- rename(Lv_rna_counts, LVblA = LVMBA,LVblB = LVMBB,LVblC = LVMBC)
 Lv_rna_counts <- rename(Lv_rna_counts, LVgaA = LVGA,LVgaB = LVGB,LVgaC = LVGC)
 Lv_rna_counts <- rename(Lv_rna_counts, LVprA = LVPRA,LVprB = LVPRB,LVprC = LVPRC)
+
 Ht_rna_counts <- rename(Ht_rna_counts, HTeggA = HTEGGA,HTeggB = HTEGGB,HTeggC = HTEGGC)
 Ht_rna_counts <- rename(Ht_rna_counts, HT4cA = HT4cellA,HT4cB = HT4cellB,HT4cC = HT4cellC)
 Ht_rna_counts <- rename(Ht_rna_counts, HT16cA = HT16cellA,HT16cB = HT16cellB,HT16cC = HT16cellC)
@@ -65,6 +72,7 @@ Ht_rna_counts <- rename(Ht_rna_counts, HT32cA = HT32cellA,HT32cB = HT32cellB,HT3
 Ht_rna_counts <- rename(Ht_rna_counts, HTblA = HTMBA,HTblB = HTMBB,HTblC = HTMBC)
 Ht_rna_counts <- rename(Ht_rna_counts, HTgaA = HTGA,HTgaB = HTGB,HTgaC = HTGC)
 Ht_rna_counts <- rename(Ht_rna_counts, HTprA = HTPRA,HTprB = HTPRB,HTprC = HTPRC)
+
 He_rna_counts <- rename(He_rna_counts, HEeggA = HEEGGA,HEeggB = HEEGGB,HEeggC = HEEGGC)
 He_rna_counts <- rename(He_rna_counts, HE4cA = HE4cellA,HE4cB = HE4cellB,HE4cC = HE4cellC)
 He_rna_counts <- rename(He_rna_counts, HE16cA = HE16cellA,HE16cB = HE16cellB,HE16cC = HE16cellC)
@@ -81,8 +89,10 @@ He_rna_counts <- He_rna_counts |> mutate_if(is.numeric, round)
 # collapse counts from alternate transcripts for each species
 Lv_rna_counts$L_var_ID <- str_replace(Lv_rna_counts$L_var_ID, "\\..*", "")
 Lv_rna_counts <- Lv_rna_counts |> group_by(L_var_ID) |> summarise(across(everything(), sum))
+
 Ht_rna_counts$H_tub_ID <- str_replace(Ht_rna_counts$H_tub_ID, "\\..*", "")
 Ht_rna_counts <- Ht_rna_counts |> group_by(H_tub_ID) |> summarise(across(everything(), sum))
+
 He_rna_counts$H_ery_ID <- str_replace(He_rna_counts$H_ery_ID, "\\..*", "")
 He_rna_counts <- He_rna_counts |> group_by(H_ery_ID) |> summarise(across(everything(), sum))
 
@@ -122,9 +132,11 @@ He_orth_rna_counts<-relocate(He_orth_rna_counts, "Orthogroup", .after = "H_ery_I
 Lv_exclude <- Lv_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
 Lv_orth_rna_counts <- left_join(Lv_orth_rna_counts, Lv_exclude)
 Lv_orth_rna_counts <- relocate(Lv_orth_rna_counts, "n", .after = "Orthogroup")
+
 He_exclude <- He_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
 He_orth_rna_counts <- left_join(He_orth_rna_counts, He_exclude)
 He_orth_rna_counts <- relocate(He_orth_rna_counts, "n", .after = "Orthogroup")
+
 Ht_exclude <- Ht_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
 Ht_orth_rna_counts <- left_join(Ht_orth_rna_counts, Ht_exclude)
 Ht_orth_rna_counts <- relocate(Ht_orth_rna_counts, "n", .after = "Orthogroup")
@@ -135,8 +147,10 @@ Ht_orth_rna_counts <- relocate(Ht_orth_rna_counts, "n", .after = "Orthogroup")
 # filter for rows with orthogroup size 1, then remove column n
 Lv_slim_rna_counts <- filter(Lv_orth_rna_counts, n == 1)
 Lv_slim_rna_counts <- select(Lv_slim_rna_counts, -(n))
+
 He_slim_rna_counts <- filter(He_orth_rna_counts, n == 1)
 He_slim_rna_counts <- select(He_slim_rna_counts, -(n))
+
 Ht_slim_rna_counts <- filter(Ht_orth_rna_counts, n == 1)
 Ht_slim_rna_counts <- select(Ht_slim_rna_counts, -(n))
 
