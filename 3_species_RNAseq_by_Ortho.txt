@@ -110,13 +110,9 @@ Ht_ortho <- read_tsv("ortho_Ht_done.tsv")
 He_ortho <- read_tsv("ortho_He_done.tsv")
 
 # rename column for each species 
-# TBD: do we need to delete header?
 Lv_ortho <- rename(Lv_ortho, L_var_ID = L_var.longestprot)
-#Lv_ortho <- Lv_ortho[-1, ]
 Ht_ortho <- rename(Ht_ortho, H_tub_ID = H_tub.longestprot)
-#Ht_ortho <- Ht_ortho[-1, ]
 He_ortho <- rename(He_ortho, H_ery_ID = H_ery.longestprot)
-#He_ortho <- He_ortho[-1, ]
 
 # join on gene ID column to append orthogroup to each count table
 Lv_orth_rna_counts <- left_join(Lv_rna_counts, Lv_ortho)
