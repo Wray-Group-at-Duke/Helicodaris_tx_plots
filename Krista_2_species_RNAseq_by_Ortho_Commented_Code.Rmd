@@ -1,0 +1,344 @@
+---
+title: "Krista_3_species_RNAseq_by_Ortho_Commented_Code"
+author: "Krista Pipho"
+date: "2024-09-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+### process bulk RNAseq time courses from 3 urchin species
+#
+# data from Israel et al. (2016) PLoS Biology DOI:10.1371/journal.pbio.1002391
+# code based on Phil's rewrite of Jennifer's original code
+#
+# updates:
+# 1 incorporated rigorous orthology (replaces blast and using SPU reference points)
+# 2 added comments
+# 3 replaced deprecated functions and operators
+# 4 organized data tables and naming conventions
+#
+# notes: 
+# 1 only need to run steps 1 to 3 once
+#   generates the file "all_rna_counts.tsv"
+#   after that, normalization, PCA, and plotting can be done directly from that file
+# 2 requires pre-computed orthogroups (e.g., from Orthofinder)
+#   table containing two columns: orthogroup and gene identifier (one gene per line)
+#   files named "ortho_Lv_done.csv", "ortho_Ht_done.csv", "ortho_He_done.csv",
+#
+# status: in progress
+#
+# to do:
+# 1 write code for generating time-courses for a given orthologue
+#   incorporate color-coding for feeding/nonfeeding (previously arbitrary)
+#   scale x-axis by clock time (previously by timepoint)
+#   display gene name (previously showed SPU_XXXX) 
+
+### 0 ### set-up
+
+# load libraries; don't load DESeq2 yet! (throws an error due to masking; load later)
+library(tidyverse)
+
+# set working directory (replace path as needed)
+#setwd("/Users/gwray/Documents/Projects_work/Bulk_RNAseq_data")
+
+
+### 1 ### import data and clean up tables
+
+# imported Phil's data 1/26/23
+
+# read in data from Phil's raw count tables for each species
+Lv_rna_counts <- read_delim("Lv_counts_frac_clean.txt", delim="\t")
+He_rna_counts <- read_delim("He_counts_frac_clean.txt", delim="\t")
+
+# reorganize into temporal sequence for each species 
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVEGG"), .after = L_var_ID)
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LV4"), .after = LVEGGC)
+Lv_rna_counts <- relocate(Lv_rna_counts, starts_with("LVMB"), .after = LV32cellC)
+
+He_rna_counts <- relocate(He_rna_counts, starts_with("HEEGG"), .after = H_ery_ID)
+He_rna_counts <- relocate(He_rna_counts, starts_with("HE4"), .after = HEEGGC)
+He_rna_counts <- relocate(He_rna_counts, starts_with("HEMB"), .after = HE32cellC)
+
+# rename columns for each species
+Lv_rna_counts <- rename(Lv_rna_counts, LVeggA = LVEGGA,LVeggB = LVEGGB,LVeggC = LVEGGC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV4cA = LV4cellA,LV4cB = LV4cellB,LV4cC = LV4cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV16cA = LV16cellA,LV16cB = LV16cellB,LV16cC = LV16cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LV32cA = LV32cellA,LV32cB = LV32cellB,LV32cC = LV32cellC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVblA = LVMBA,LVblB = LVMBB,LVblC = LVMBC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVgaA = LVGA,LVgaB = LVGB,LVgaC = LVGC)
+Lv_rna_counts <- rename(Lv_rna_counts, LVprA = LVPRA,LVprB = LVPRB,LVprC = LVPRC)
+
+He_rna_counts <- rename(He_rna_counts, HEeggA = HEEGGA,HEeggB = HEEGGB,HEeggC = HEEGGC)
+He_rna_counts <- rename(He_rna_counts, HE4cA = HE4cellA,HE4cB = HE4cellB,HE4cC = HE4cellC)
+He_rna_counts <- rename(He_rna_counts, HE16cA = HE16cellA,HE16cB = HE16cellB,HE16cC = HE16cellC)
+He_rna_counts <- rename(He_rna_counts, HE32cA = HE32cellA,HE32cB = HE32cellB,HE32cC = HE32cellC)
+He_rna_counts <- rename(He_rna_counts, HEblA = HEMBA,HEblB = HEMBB,HEblC = HEMBC)
+He_rna_counts <- rename(He_rna_counts, HEgaA = HEGA,HEgaB = HEGB,HEgaC = HEGC)
+He_rna_counts <- rename(He_rna_counts, HEprA = HEPRA,HEprB = HEPRB,HEprC = HEPRC)
+
+# round counts to nearest integer for each species
+Lv_rna_counts <- Lv_rna_counts |> mutate_if(is.numeric, round)
+He_rna_counts <- He_rna_counts |> mutate_if(is.numeric, round)
+
+# collapse counts from alternate transcripts for each species
+Lv_rna_counts$L_var_ID <- str_replace(Lv_rna_counts$L_var_ID, "\\..*", "")
+Lv_rna_counts <- Lv_rna_counts |> group_by(L_var_ID) |> summarise(across(everything(), sum))
+
+He_rna_counts$H_ery_ID <- str_replace(He_rna_counts$H_ery_ID, "\\..*", "")
+He_rna_counts <- He_rna_counts |> group_by(H_ery_ID) |> summarise(across(everything(), sum))
+
+# save intermediate tables 
+write_tsv(Lv_rna_counts, "Lv_rna_raw_counts.txt") 
+write_tsv(He_rna_counts, "He_rna_raw_counts.txt")
+```
+
+
+```{r}
+### 2 ### add orthogroup number to each gene 
+
+# import orthogroup tables
+Lv_ortho <- read_tsv("ortho_Lv_done.tsv")
+He_ortho <- read_tsv("ortho_He_done.tsv")
+
+# rename column for each species 
+Lv_ortho <- rename(Lv_ortho, L_var_ID = L_var.longestprot)
+He_ortho <- rename(He_ortho, H_ery_ID = H_ery.longestprot)
+
+# join on gene ID column to append orthogroup to each count table
+Lv_orth_rna_counts <- left_join(Lv_rna_counts, Lv_ortho)
+He_orth_rna_counts <- left_join(He_rna_counts, He_ortho)
+
+# move orthogroup column to second position
+Lv_orth_rna_counts<-relocate(Lv_orth_rna_counts, "Orthogroup", .after = "L_var_ID")
+He_orth_rna_counts<-relocate(He_orth_rna_counts, "Orthogroup", .after = "H_ery_ID")
+
+# save intermediate tables 
+write_tsv(Lv_orth_rna_counts, "Lv_orth_rna_counts.txt") 
+write_tsv(He_orth_rna_counts, "He_orth_rna_counts.txt") 
+```
+
+
+```{r}
+### 3 ### Tally genes per orthogroup and merge 1:1:1 orthologues into a single count table
+
+# add column n with size of orthogroup to each table
+Lv_exclude <- Lv_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
+Lv_orth_rna_counts <- left_join(Lv_orth_rna_counts, Lv_exclude)
+Lv_orth_rna_counts <- relocate(Lv_orth_rna_counts, "n", .after = "Orthogroup")
+
+He_exclude <- He_orth_rna_counts |> group_by(Orthogroup) |> count(Orthogroup) |> arrange(n)
+He_orth_rna_counts <- left_join(He_orth_rna_counts, He_exclude)
+He_orth_rna_counts <- relocate(He_orth_rna_counts, "n", .after = "Orthogroup")
+
+# filter for rows with orthogroup size 1, then remove column n
+Lv_slim_rna_counts <- filter(Lv_orth_rna_counts, n == 1)
+Lv_slim_rna_counts <- select(Lv_slim_rna_counts, -(n))
+
+He_slim_rna_counts <- filter(He_orth_rna_counts, n == 1)
+He_slim_rna_counts <- select(He_slim_rna_counts, -(n))
+
+
+# create table with both species joined by orthogroup
+all_rna_counts_sum <- inner_join(He_slim_rna_counts, Lv_slim_rna_counts, by = "Orthogroup")
+
+# move orthogroup number to first column
+all_rna_counts_sum <- relocate(all_rna_counts_sum, "H_ery_ID", .after = "Orthogroup")
+
+# write merged count table
+write_tsv(all_rna_counts_sum, "all_rna_counts.tsv")
+```
+
+
+```{r}
+### 4 ### normalize counts using DESeq2 and perform differential expression analysis
+
+# read merged count table and assign to a data frame
+d <- read_tsv ("all_rna_counts.tsv")
+
+# remove gene ID and Orthogroup columns (messes up DESeq2)
+d <- select(d, -(c(L_var_ID, H_ery_ID)))
+names <- d$Orthogroup
+d <- select(d, -Orthogroup)
+
+# read in sample info for each species and store as a data frame
+Hery_sample_info <- read.csv("He_sample_info.csv")
+Lvar_sample_info <- read.csv("Lv_sample_info.csv")
+
+# combine all sample info into a single data frame “s”
+s <- rbind(Hery_sample_info, Lvar_sample_info)
+
+```
+
+
+```{r}
+# load DESeq2 library
+# BiocManager::install("DESeq2")
+library(DESeq2)
+
+# create DESeq object from count table, sample info, with Species as variable of interest
+dds_rna <- DESeqDataSetFromMatrix(countData = d, colData = s, design = ~Species)
+
+# create a new variable "group" that combines species and stage
+dds_rna$group <- factor(paste0(dds_rna$Species, dds_rna$Stage))
+
+# update design to include "group"
+design(dds_rna) <- ~ group
+
+# perform differential expression analysis
+dds_rna <- DESeq(dds_rna) 
+
+# transform count data to log2 and store as a data frame
+rlog_dds_rna <- rlog(dds_rna)
+rlog_rna_counts <- as.data.frame(assay(rlog_dds_rna))
+rlog_rna_countsT <- as.data.frame(t(rlog_rna_counts))
+```
+
+```{r}
+### 5 ### carry out PCA and plot
+
+# perform the PCA
+PCAT_rna <- prcomp(rlog_rna_countsT, center = TRUE)
+PCsT_rna <- as.data.frame(PCAT_rna$x)
+PCsT_rna$Sample <- row.names(PCsT_rna)
+PCsT_rna <- inner_join(PCsT_rna, s, by = "Sample")
+PCsT_rna$Stage <- factor(PCsT_rna$Stage,levels = c("egg","4c","16c","32c","bl","ga","pr"))
+###PCsT_rna$Stage <- factor(PCsT_rna$Stage,levels = c("egg","4c","16c","32c","bl","g","pr")) # Changed from g to ga
+```
+
+
+```{r}
+# print a summary of PCA results
+summary(PCAT_rna)
+
+# create a scatter plot of principle component analysis
+# can vary PC1, PC2, PC3, etc, as well as change colors, shapes, etc. easily here
+# note: factor loading values are "hard wired" so update for other PCs
+ggplot(data = PCsT_rna, aes(PC1, PC2, color = Species, shape = Stage)) +
+  geom_point(size = 3) + 
+  scale_shape_manual(values = c(0,1,2,15,16,17,8)) +
+  labs(x = "PC1 (28.5%)", y = "PC2 (21.0%)") +
+  theme_classic()
+```
+ 
+
+```{r}
+# Takes every third column name and removes the last character (originally an A, B, or C to distinguish between replicates) 
+col <- colnames(rlog_rna_counts)
+col <- col[seq(1, length(col), 3)]
+col <- substr(col, 1, nchar(col)-1)
+
+# Takes the mean of every group of three consecutive columns. I checked before to make sure the columns were still in order. 
+rlog_rna_count_means <- as_tibble(sapply(seq(1, ncol(rlog_rna_counts), 3), function(j) rowMeans(rlog_rna_counts[, j+(0:2)])))
+
+# Puts updated column names on the mean summaries
+names(rlog_rna_count_means) <- col
+   
+# Put orthogroup names back on mean summaries of the DESeq2 results
+named_rlog_rna_count_means <- as_tibble(cbind(names, rlog_rna_count_means))
+
+```
+
+```{r}
+
+# Separates the names DESeq results into per species tables and adds a species column
+LV_processed <- named_rlog_rna_count_means %>% select(names, starts_with("LV")) %>% mutate(species = "LV")
+HE_processed <- named_rlog_rna_count_means %>% select(names, starts_with("HE")) %>% mutate(species = "HE")
+
+# Renames all columns to hours post fertilization 
+names(LV_processed) <- c("orthogroup", 0, 2, 3, 4, 10, 16, 24, "species")
+names(HE_processed) <- c("orthogroup", 0, 2, 3, 4, 10, 16, 24, "species")
+
+# Pivots all tables to long form, where each row has orthogroup, species, hpf, and expression value
+LV_long <- LV_processed %>% pivot_longer(cols = c("0", "2", "3", "4", "10", "16", "24"), names_to = "hpf", values_to = "ex")
+HE_long <- HE_processed %>% pivot_longer(cols = c("0", "2", "3", "4", "10", "16", "24"), names_to = "hpf", values_to = "ex")
+
+# Re-combines the three species
+combined_processed_data <- rbind(LV_long, HE_long)
+
+# Saves the final data table
+write_tsv(combined_processed_data, "Final_Long_Lv_He.txt") 
+
+```
+
+
+```{r}
+
+combined_processed_data <- combined_processed_data %>% mutate_at("hpf", as.integer)
+
+eg <- read.csv("Expression_Genes.csv", sep = ",")
+
+```
+
+
+```{r}
+a <- 1
+
+input_g1 <- eg$orthogroup[a]
+gene_name <- eg$name[a]
+
+# For two species, delete later
+expr_plot <- combined_processed_data |>
+        filter(orthogroup == input_g1) |>
+  ggplot(aes(hpf, ex, color=species)) +
+        geom_line(size = 1.25) +
+        labs(y = "Mean Expression") +
+        labs(x = "Hours Post-Fertilization") +
+        labs(title = str_c(gene_name, ' Expression')) +
+        theme_minimal() +
+  scale_x_continuous(breaks=c(0, 2, 3, 4, 10, 16, 24)) +
+scale_color_manual(values=c("#148040", "#FAB120")) +
+        theme(
+          panel.grid.minor = element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.title.x = element_text(family = "sans", size = 16, margin=margin(10,0,0,0)), 
+          axis.title.y = element_text(family = "sans", size = 16, margin=margin(0,12,0,0)), 
+          axis.text = element_text(family = "mono", size = 14),
+          plot.title = element_text(family = "sans", size = 18, margin=margin(0,0,20,0)),
+          )
+
+ggsave(file=str_c("C:/Users/Alexander\ Saunders/Desktop/Count\ tables/Expr/Expr_", gene_name, ".svg"), plot=expr_plot, width=10, height=5)
+```
+
+```{r}
+long_tc <- read.csv("C:/Users/Alexander\ Saunders/Desktop/Wray\ Lab/Heliocidaris_tx_plots/ShinyApp/new_coexpression.csv") |> tibble::as_tibble()
+
+pairs_coex <- read.csv("C:/Users/Alexander\ Saunders/Desktop/Wray\ Lab/Heliocidaris_tx_plots/coexpression_pairs.txt") |> tibble::as_tibble()
+
+
+```
+
+```{r}
+a <- 12
+
+g1a <- pairs_coex$gene1[a]
+
+g2a <- pairs_coex$gene2[a]
+
+
+        coExpr_plot <- long_tc |>
+          filter(tolower(gene_1) == tolower(g1a) & tolower(gene_2) == tolower(g2a) & coex < 100)|>
+          ggplot(aes(hpf, coex, color=species)) +
+          geom_line(size = 1.25) +
+          labs(y = '% cells with coexpression') +
+          labs(title = str_c('Coexpression of ', g1a, " and ", g2a)) +
+          theme_minimal() +
+          scale_x_continuous(breaks=c(6,9,12,16,20,24)) +
+          scale_color_manual(values=c("#FAB120", "#148040")) +
+          theme(
+            panel.grid.minor = element_blank(),
+            axis.ticks.x=element_blank(),
+            axis.ticks.y=element_blank(),
+            axis.title.x = element_text(family = "sans", size = 16, margin=margin(10,0,0,0)), 
+            axis.title.y = element_text(family = "sans", size = 16, margin=margin(0,12,0,0)), 
+            axis.text = element_text(family = "mono", size = 14),
+            plot.title = element_text(family = "sans", size = 18, margin=margin(0,0,20,0)),
+            legend.position = "none"
+          )
+        
+      ggsave(file=str_c("C:/Users/Alexander\ Saunders/Desktop/Count\ tables/CoExpr/CoExpr_", g1a, " and ", g2a, ".svg"), plot=coExpr_plot, width=10, height=5)
+```
+

@@ -1,0 +1,110 @@
+---
+title: "Untitled"
+author: "Krista Pipho"
+date: "2024-09-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+temp1 <- read.csv("find_ortho.txt", sep="\t", header = FALSE) |> tibble::as_tibble()
+colnames(temp1)[2] <- "gene"
+colnames(temp1)[1] <- "name"
+temp1
+temp2 <- read.csv("../ortho_Lv_done.tsv", sep="\t") |> tibble::as_tibble()
+
+colnames(temp2)[2] <- "gene"
+temp2
+
+temp3 <- read.csv("../ortho_He_done.tsv", sep="\t") |> tibble::as_tibble()
+
+colnames(temp3)[2] <- "gene"
+temp3
+
+temp4 <- read.csv("../ortho_Ht_done.tsv", sep="\t") |> tibble::as_tibble()
+
+colnames(temp4)[2] <- "gene"
+temp4
+
+temp5 <- left_join(temp1, temp2, by = "gene")
+temp6 <- left_join(temp5, temp3, by = "Orthogroup")
+temp8 <- left_join(temp6, temp4, by = "Orthogroup")
+
+colnames(temp8)[2] <- "LV"
+colnames(temp8)[5] <- "HT"
+colnames(temp8)[4] <- "HE"
+colnames(temp8)[3] <- "orthogroup"
+temp8 %>% select("name", "orthogroup", "LV", "HT", "HE") %>% write_csv("g2o.txt") 
+
+```
+erg
+sm50
+Msp1301
+Ets12
+FoxO1
+
+```{r}
+
+library(tidyverse)
+
+combined_expression <- read.csv("../Final_Long_Lv_Ht_He.txt", sep = "\t") |> tibble::as_tibble()
+combined_expression
+
+g2o_code <- read.csv("gene_to_orthogroup_code.txt")
+g2o_code
+
+combined_expression %>% filter(combined_expression$orthogroup == "OG0013060")
+
+#filter(g2o_code, tolower(name) == tolower(input$g1))$orthogroup
+```
+###### Preparing Tables for Coexpression ######
+
+
+```{r}
+# read in data and convert to tibble
+Lv_expression_df <- read.csv("Lv_counts_FAKE.csv") |> tibble::as_tibble()
+Ht_expression_df <- read.csv("Ht_counts_FAKE.csv") |> tibble::as_tibble()
+Lv_expression_df
+```
+
+
+```{r reformat data}
+#create species column, reorder columns
+
+Lv_expression_df <- mutate(Lv_expression_df, species = "Lv")
+Lv_expression_df <- select(Lv_expression_df, species, everything())
+Ht_expression_df <- mutate(Ht_expression_df, species = "Ht")
+Ht_expression_df <- select(Ht_expression_df, species, everything())
+```
+
+
+```{r merge tables}
+# combine tables from 2 species and pivot to long
+both_expression_df <- rbind(Lv_expression_df, Ht_expression_df)
+long_expression_tc <- both_expression_df |> 
+  pivot_longer(cols = starts_with("X"), values_to = "coex")
+glimpse(long_expression_tc)
+```
+
+
+```{r add time values}
+# define time points and add hpf column
+time_pts <- c(6,9,12,16,20,24,30)
+n_t_pts <- length(time_pts)
+len_long_tc <- nrow(long_expression_tc)
+long_tc = mutate(long_expression_tc, hpf = rep(time_pts, len_long_tc/n_t_pts))
+long_tc <- select(long_tc, !name)
+glimpse(long_tc)
+
+```
+
+```{r}
+write.table(long_tc , file = "combined_expression.csv", sep=",", row.names=FALSE)
+```
+
+
+
+

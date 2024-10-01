@@ -1,0 +1,12 @@
+gene1,gene2
+Alx1,Ets1
+Alx1,Tgif
+Alx1,Dr1
+Alx1,Vegfr10
+Alx1,FoxB
+Ets1,Tbr
+Dr1,FoxB
+FoxB,Tbr
+FoxB,Msp130
+Alx1,Sm50
+Alx1,Msp130
