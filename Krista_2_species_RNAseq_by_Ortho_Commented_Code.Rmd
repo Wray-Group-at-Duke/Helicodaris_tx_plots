@@ -101,8 +101,8 @@ write_tsv(He_rna_counts, "He_rna_raw_counts.txt")
 ### 2 ### add orthogroup number to each gene 
 
 # import orthogroup tables
-Lv_ortho <- read_tsv("ortho_Lv_done.tsv")
-He_ortho <- read_tsv("ortho_He_done.tsv")
+Lv_ortho <- read_tsv("ortho_Lv_ready.tsv")
+He_ortho <- read_tsv("ortho_He_ready.tsv")
 
 # rename column for each species 
 Lv_ortho <- rename(Lv_ortho, L_var_ID = L_var.longestprot)
@@ -269,15 +269,21 @@ write_tsv(combined_processed_data, "Final_Long_Lv_He.txt")
 
 combined_processed_data <- combined_processed_data %>% mutate_at("hpf", as.integer)
 
-eg <- read.csv("Expression_Genes.csv", sep = ",")
+eg <- read.csv("Expression_Genes.csv", sep = "\t")
 
 ```
 
 
 ```{r}
-a <- 1
+library(scales)
+scale_y_log2 <- function (...) 
+{
+  scale_y_continuous(..., trans = log2_trans())
+}
 
-input_g1 <- eg$orthogroup[a]
+a <- 11
+
+input_g1 <- eg$Orthogroup[a]
 gene_name <- eg$name[a]
 
 # For two species, delete later
@@ -285,6 +291,8 @@ expr_plot <- combined_processed_data |>
         filter(orthogroup == input_g1) |>
   ggplot(aes(hpf, ex, color=species)) +
         geom_line(size = 1.25) +
+        scale_y_log2() + 
+        geom_hline(yintercept=5, linetype="dashed", color = "red") +
         labs(y = "Mean Expression") +
         labs(x = "Hours Post-Fertilization") +
         labs(title = str_c(gene_name, ' Expression')) +

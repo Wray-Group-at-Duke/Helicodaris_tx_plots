@@ -1,0 +1,73 @@
+---
+title: "Generate Clean Orthogroup Files"
+author: "Krista Pipho"
+format: html
+engine: knitr
+---
+
+NOTES ON MAKING NEW COUNT TABLES 
+
+Data from Israel et al. (2016). Code from Greg Wray (2024). 
+
+Starting with count tables for each species
+Using Phil’s code as a starting point
+Changes
+	Renamed samples and re-ordered into temporal sequence
+	Replaced SPUs as "common currency" with orthogroups (see notes below)
+
+
+OrthoFinder notes
+Ran with 7 species: Lv, Lp, Ht, He, El, Sp, Pl
+Results in tarball on lab DropBox
+Get details from Hannah on version, etc.
+
+There are 2 lines of header, but these should be innocuous as they won't match any values in count tables during the join operation. Need to confirm!
+
+
+
+#5. remove non-printing characters and lines where there are no genes in the orthogroup, then re-insert a tab:
+
+cat ortho_cleaning/ortho_He_ready.tsv | tr -d "[:blank:]" | grep -v "none" | sed 's/L/\tL/g' > ortho_He_clean.tsv
+cat ortho_cleaning/ortho_Ht_ready.tsv | tr -d "[:blank:]" | grep -v "none" | sed 's/L/\tL/g' > ortho_Ht_clean.tsv
+cat ortho_cleaning/ortho_Lv_ready.tsv | tr -d "[:blank:]" | grep -v "none" | sed 's/L/\tL/g' > ortho_Lv_clean.tsv
+
+## Python
+
+```{python}
+import os
+os.getcwd()
+```
+
+## Shell
+
+```{bash}
+#!/bin/bash
+echo "Today is " `date`
+
+### Processing OrthoFinder table prior to joining with count table:
+
+#1: remove 2 columns for each species: orthogroup and identifiers
+
+cut -f1,2 ortho_cleaning/H_ery.longestprot__v__E_luc.longestprot.tsv > ortho_cleaning/ortho_He1.tsv
+cut -f1,2 ortho_cleaning/H_tub.longestprot__v__E_luc.longestprot.tsv > ortho_cleaning/ortho_Ht1.tsv
+cut -f1,2 ortho_cleaning/L_var.longestprot__v__H_ery.longestprot.tsv > ortho_cleaning/ortho_Lv1.tsv
+
+#2: trim spaces after commas separating values in identifiers columns (necessary for splitting by awk later)
+
+cat ortho_cleaning/ortho_He1.tsv | sed 's/, /,/g' > ortho_cleaning/ortho_He2.tsv
+cat ortho_cleaning/ortho_Ht1.tsv | sed 's/, /,/g' > ortho_cleaning/ortho_Ht2.tsv
+cat ortho_cleaning/ortho_Lv1.tsv | sed 's/, /,/g' > ortho_cleaning/ortho_Lv2.tsv
+
+#3: add “none”  to blank entries
+
+cat ortho_cleaning/ortho_He2.tsv | awk -F'\t' 'BEGIN{OFS=FS} $2 == "" {$2 = "none"} 1' > ortho_cleaning/ortho_He3.tsv
+cat ortho_cleaning/ortho_Ht2.tsv | awk -F'\t' 'BEGIN{OFS=FS} $2 == "" {$2 = "none"} 1' > ortho_cleaning/ortho_Ht3.tsv
+cat ortho_cleaning/ortho_Lv2.tsv | awk -F'\t' 'BEGIN{OFS=FS} $2 == "" {$2 = "none"} 1' > ortho_cleaning/ortho_Lv3.tsv
+
+#4. create new row for each entry in identifiers column with associated orthogroup:
+
+awk 'BEGIN {OFS='\t'} FNR==1{print} {num=split($2,array,/,/)} {for(i=1;i<=num;i++) {print $1,"\t",array[i]}}' ortho_cleaning/ortho_He3.tsv > ortho_He_ready.tsv 
+awk 'BEGIN {OFS='\t'} FNR==1{print} {num=split($2,array,/,/)} {for(i=1;i<=num;i++) {print $1,"\t",array[i]}}' ortho_cleaning/ortho_Ht3.tsv > ortho_Ht_ready.tsv 
+awk 'BEGIN {OFS='\t'} FNR==1{print} {num=split($2,array,/,/)} {for(i=1;i<=num;i++) {print $1,"\t",array[i]}}' ortho_cleaning/ortho_Lv3.tsv > ortho_Lv_ready.tsv 
+
+```
